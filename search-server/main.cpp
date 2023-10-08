@@ -29,19 +29,19 @@ vector<string> SplitIntoWords(const string& text) {
     string word;
 
     for (const char c : text) {
-        
+
         if (c == ' ') {
             if (!word.empty()) {
                 words.push_back(word);
                 word.clear();
             }
         }
-        
+
         else {
             word += c;
         }
     }
-    
+
     if (!word.empty()) {
         words.push_back(word);
     }
@@ -57,6 +57,12 @@ struct Document {
 struct Query {
     set<string> plus_words;
     set<string> minus_words;
+};
+
+struct QueryWord {
+    string word;
+    bool is_plus;
+    bool is_minus;
 };
 
 class SearchServer {
@@ -119,18 +125,37 @@ private:
         return words;
     }
 
+    /* Отдельный метод определения: является ли слово "минус" или "плюс". Запись в структуру QueryWord. */
+    QueryWord PareQueryWord(const string& text) const {
+        QueryWord query_word;
+
+        if (text[0] == '-') {
+            query_word.is_minus = true;
+            query_word.is_plus = false;
+            query_word.word = text.substr(1);
+        }
+        else {
+            query_word.is_plus = true;
+            query_word.is_minus = false;
+            query_word.word = text;
+        }
+
+        return query_word;
+    }
+
     Query ParseQuery(const string& text) const {
         Query query;
 
         for (const string& word : SplitIntoWords(text)) {
 
-            if (word[0] == '-') {
-                string temp_word = word.substr(1);
-                query.minus_words.insert(temp_word);
+            QueryWord temp_query_word = PareQueryWord(word);
+
+            if (temp_query_word.is_minus) {
+                query.minus_words.insert(temp_query_word.word);
             }
 
-            if (!IsStopWord(word)) {
-                query.plus_words.insert(word);
+            if (!IsStopWord(temp_query_word.word)) {
+                query.plus_words.insert(temp_query_word.word);
             }
 
         }
@@ -138,15 +163,20 @@ private:
         return query;
     }
 
+    /* Отдельный метод расчета IDF. */
+    double CalculateIDF(const string& word, const double& tf) const {
+        return log(document_count_ / static_cast<double>(word_to_document_freqs_.at(word).size())) * tf;
+    }
+
     vector<Document> FindAllDocuments(const Query& query) const {
         map<int, double> document_to_relevance;    // ключ id, значение - релевантность
         vector<Document> matched_documents;
 
-        /* Перебераем плюс слова если содержаться в док-те, то для каждого id добавляем релевантность (idf*tf) */
+        /* Перебераем плюс слова если содержаться в док-те, то для каждого id добавляем релевантность */
         for (const auto& word : query.plus_words) {
             if (word_to_document_freqs_.count(word)) {
                 for (auto& [id, tf] : word_to_document_freqs_.at(word)) {
-                    document_to_relevance[id] += log(document_count_ / static_cast<double>(word_to_document_freqs_.at(word).size())) * tf;
+                    document_to_relevance[id] += CalculateIDF(word, tf);
                 }
             }
         }
