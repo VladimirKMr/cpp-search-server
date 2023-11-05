@@ -58,7 +58,7 @@ struct Document {
     Document(int id, double relevance, int rating)
         : id(id), relevance(relevance), rating(rating) {
     }
-    // Конструктор по умолчанию (с заданными значениями по умолчанию)
+    // Конструктор по умолчанию
     Document() = default;
 };
 
@@ -83,15 +83,10 @@ public:
     }
 
     explicit SearchServer(const string& stop_words) {  // конструктор для стоп слов в виде строки
-        if (!IsValidWord(stop_words)) {
-            throw invalid_argument("invalid stop words"s);
-        }
-        for (const string& word : SplitIntoWords(stop_words)) {
-            stop_words_.insert(word);
-        }
+        SearchServer server(SplitIntoWords(stop_words));
     }
 
-    SearchServer() = default; // Конструктор по умолчанию
+    SearchServer() = default;  // Конструктор по умолчанию
 
     void AddDocument(int document_id, const string& document, DocumentStatus status,
                      const vector<int>& ratings) {
@@ -107,20 +102,18 @@ public:
 
         const vector<string> words = SplitIntoWordsNoStop(document);
 
-        const double inv_word_count = 1.0 / words.size(); // Для расчета TF
+        const double inv_word_count = 1.0 / words.size();  // Для расчета TF
 
         for (const string& word : words) {
-            word_to_document_freqs_[word][document_id] += inv_word_count; // Добавление TF в word_to_document_freqs_
+            word_to_document_freqs_[word][document_id] += inv_word_count;  // Добавление TF в word_to_document_freqs_
         }
         documents_.emplace(document_id, DocumentData{ ComputeAverageRating(ratings), status });
+        id_number_.push_back(document_id);
     }
 
     // Поиск с фильтром (предикатом)
     template <typename DocumentPredicate>
     vector<Document> FindTopDocuments(const string& raw_query, DocumentPredicate predicate) const {
-        if (!IsValidWord(raw_query)) {
-            throw invalid_argument("invalid query"s);
-        }
 
         const Query query = ParseQuery(raw_query);
         auto matched_documents = FindAllDocuments(query, predicate);
@@ -154,18 +147,16 @@ public:
 
     // метод получения id документа по индексу в словаре
     int GetDocumentId(int index) const {
-        if (index < 0 || index > GetDocumentCount() - 1) {
+        if (index < 0 || index > id_number_.size()) {
             throw out_of_range("out of range documents"s);
         }
-        auto it = documents_.begin();
-        advance(it, index);  // применил такой подход, чтобы не вводить новый словарь
-        return it->first;
+        return id_number_[index];
     }
 
     // Отдельный метод поиска слов в определенном документе. Возвращает кортеж (совпадающие слова, статус документа).
     tuple<vector<string>, DocumentStatus> MatchDocument(const string& raw_query, int document_id) const {
-        if (!IsValidWord(raw_query) || document_id < 0) {
-            throw invalid_argument("invalid query"s);
+        if (document_id < 0) {
+            throw invalid_argument("invalid document_id"s);
         }
 
         vector<string> words_to_result;
@@ -193,6 +184,7 @@ private:
         DocumentStatus status;
     };
 
+    vector<int> id_number_;
     set<string> stop_words_;
     map<string, map<int, double>> word_to_document_freqs_;  // хранит: слово (string), номера документов (int), tf (double)
     map<int, DocumentData> documents_; // id, rating, status
@@ -203,18 +195,9 @@ private:
 
     // статический метод проверки, что в слове нет спец символов с кодами от 0 до пробела
     static bool IsValidWord(const string& word) {
-        // проверяем на валидность по различным требованиям (наличие спецсимволов, двойного тире, слово из одного тире, тире в конце слова)
+        // проверяем на валидность по спецсимволам
         for (int i = 0; i < word.size(); ++i) {
             if (word[i] >= '\0' && word[i] < ' ') {
-                return false;
-            }
-            if (word[i] == '-' && word[i + 1] == '-') {
-                return false;
-            }
-            if (word[i] == '-' && i + 1 == word.size()) {
-                return false;
-            }
-            if (word[i] == '-' && word.size() == 1) {
                 return false;
             }
         }
@@ -249,11 +232,35 @@ private:
     /* Отдельный метод определения: является ли слово "минус" или "плюс", "стоп-словом". Запись в структуру QueryWord. */
     QueryWord ParseQueryWord(string text) const {
         bool is_minus = false;
-        // Word shouldn't be empty
+        // Перенес проверки на минусы только для запросов
         if (text[0] == '-') {
+            if (text[0] == '-' && text[1] == '-') {
+                throw invalid_argument("invalid query (double minus)"s);
+            }
             is_minus = true;
             text = text.substr(1);
         }
+        
+        for (int i = 0; i < text.size(); ++i) {
+            if (text[i] == '-' && text[i + 1] == '-') {
+                throw invalid_argument("invalid query (double minus)"s);
+            }
+            if (text[i] == '-' && i + 1 == text.size()) {
+                throw invalid_argument("invalid query (minus end word)"s);
+            }
+            if (text[i] == '-' && text.size() == 1) {
+                throw invalid_argument("invalid query (minus without word)"s);
+            }
+        }
+
+        if (text.empty()) {
+            throw invalid_argument("query word not found");
+        }
+
+        if (!IsValidWord(text)) {
+            throw invalid_argument("query word with special characters");
+        }
+        
         return { text, is_minus, IsStopWord(text) };
     }
 
@@ -267,19 +274,13 @@ private:
         for (const string& word : SplitIntoWords(text)) {
             const QueryWord query_word = ParseQueryWord(word);
 
-            if (IsValidWord(query_word.data)) {
-                if (!query_word.is_stop) {
-                    if (query_word.is_minus) {
-                        query.minus_words.insert(query_word.data);
-                    }
-                    else {
-                        query.plus_words.insert(query_word.data);
-                    }
+            if (!query_word.is_stop) {
+                if (query_word.is_minus) {
+                    query.minus_words.insert(query_word.data);
                 }
-            }
-            else {
-                query.minus_words.clear();
-                query.plus_words.clear();
+                else {
+                    query.plus_words.insert(query_word.data);
+                }
             }
         }
         return query;
@@ -335,8 +336,56 @@ void PrintDocument(const Document& document) {
         << "rating = "s << document.rating << " }"s << endl;
 }
 
+void PrintMatchedDocument(const tuple<vector<string>, DocumentStatus>& matchResult) {
+    vector<string> matchedWords = get<0>(matchResult);
+    DocumentStatus documentStatus = get<1>(matchResult);
+
+    cout << "Matched words: ";
+    for (const string& word : matchedWords) {
+        cout << word << " ";
+    }
+    cout << "\nDocument Status: " << static_cast<int>(documentStatus) << endl;
+}
+
+
+/* ---------- Для примера и тестирования ---------- */
+
 int main() {
 
+    SearchServer server1("и в на"s);
+
+    server1.AddDocument(1, "черный пёс рыжий хвост"s, DocumentStatus::ACTUAL, {1, 5, 7});
+    server1.AddDocument(2, "черный кот хвост"s, DocumentStatus::ACTUAL, { 1, 5, 7 });
+    server1.AddDocument(3, "белый попугай рыжий"s, DocumentStatus::ACTUAL, { 1, 5, 7 });
+
+    auto documents = server1.FindTopDocuments("черный пёс"s);
     
+    for (const Document& document : documents) {
+        PrintDocument(document);
+    }
+
+    cout << server1.GetDocumentCount() << endl;
+
+    /*==========================================================*/
+
+    vector<string> stop_words_doc = { "белый"s ,  "кот"s ,  "и"s ,  "модный"s ,  "ошейник"s };
+    SearchServer search_server(stop_words_doc);
+
+    search_server.AddDocument(10, "белый кот и модный ошейник", DocumentStatus::ACTUAL, { 1 });
+    search_server.AddDocument(11, "пушистый кот пушистый хвост", DocumentStatus::ACTUAL, { 2 });
+    search_server.AddDocument(12, "ухоженный пёс выразительные глаза", DocumentStatus::ACTUAL, { 3 });
+
+    const SearchServer const_search_server = search_server;
+
+    const auto documents2 = const_search_server.FindTopDocuments("пушистый и ухоженный кот", [](int document_id, DocumentStatus status, int rating) { return rating > 0; });
+    
+    for (const Document& document : documents2) {  // { document_id = 1, relevance = 0.732408, rating = 2 }
+        PrintDocument(document);                   // { document_id = 2, relevance = 0.274653, rating = 3 }
+    }
+
+    cout << search_server.GetDocumentId(0) << endl;
+
+    PrintMatchedDocument(search_server.MatchDocument("ухоженный"s, 12));
+
     return 0;
 }
