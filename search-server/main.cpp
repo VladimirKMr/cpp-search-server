@@ -232,25 +232,20 @@ private:
     /* Отдельный метод определения: является ли слово "минус" или "плюс", "стоп-словом". Запись в структуру QueryWord. */
     QueryWord ParseQueryWord(string text) const {
         bool is_minus = false;
-        // Перенес проверки на минусы только для запросов
+        // Проверки на корректность запроса
         if (text[0] == '-') {
             if (text[0] == '-' && text[1] == '-') {
                 throw invalid_argument("invalid query (double minus)"s);
             }
+            if (text.size() == 1) {
+                throw invalid_argument("invalid query (minus without word)"s);
+            }
             is_minus = true;
             text = text.substr(1);
         }
-        
-        for (int i = 0; i < text.size(); ++i) {
-            if (text[i] == '-' && text[i + 1] == '-') {
-                throw invalid_argument("invalid query (double minus)"s);
-            }
-            if (text[i] == '-' && i + 1 == text.size()) {
-                throw invalid_argument("invalid query (minus end word)"s);
-            }
-            if (text[i] == '-' && text.size() == 1) {
-                throw invalid_argument("invalid query (minus without word)"s);
-            }
+
+        if (text[text.size() - 1] == '-') {
+            throw invalid_argument("invalid query (minus end word)"s);
         }
 
         if (text.empty()) {
@@ -377,7 +372,7 @@ int main() {
 
     const SearchServer const_search_server = search_server;
 
-    const auto documents2 = const_search_server.FindTopDocuments("пушистый и ухоженный кот", [](int document_id, DocumentStatus status, int rating) { return rating > 0; });
+    const auto documents2 = const_search_server.FindTopDocuments("пушистый и -ухоженный кот", [](int document_id, DocumentStatus status, int rating) { return rating > 0; });
     
     for (const Document& document : documents2) {  // { document_id = 1, relevance = 0.732408, rating = 2 }
         PrintDocument(document);                   // { document_id = 2, relevance = 0.274653, rating = 3 }
