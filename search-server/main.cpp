@@ -82,8 +82,8 @@ public:
         }
     }
 
-    explicit SearchServer(const string& stop_words) {  // конструктор для стоп слов в виде строки
-        SearchServer server(SplitIntoWords(stop_words));
+    explicit SearchServer(const string& stop_words) : SearchServer(SplitIntoWords(stop_words)) {  // конструктор для стоп слов в виде строки
+
     }
 
     SearchServer() = default;  // Конструктор по умолчанию
