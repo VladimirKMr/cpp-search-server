@@ -54,11 +54,9 @@ struct Document {
     int id = 0;
     double relevance = 0.0;
     int rating = 0;
-    // Параметризованный конструктор
     Document(int id, double relevance, int rating)
         : id(id), relevance(relevance), rating(rating) {
     }
-    // Конструктор по умолчанию
     Document() = default;
 };
 
@@ -342,45 +340,119 @@ void PrintMatchedDocument(const tuple<vector<string>, DocumentStatus>& matchResu
     cout << "\nDocument Status: " << static_cast<int>(documentStatus) << endl;
 }
 
+// класс "страницы поиска", составлен из итераторов
+template <typename PaginatorIterator>
+class IteratorRange {
+public:
+    IteratorRange (PaginatorIterator begin, PaginatorIterator end, size_t page_size) 
+        : begin_(begin), end_(end), page_size_(page_size) {
+
+        }
+    
+    auto Begin() const {
+        return begin_;
+    }
+    auto End() const {
+        return end_;
+    }
+    auto size() const {
+        return page_size_;
+    }
+ 
+private:
+    PaginatorIterator begin_;
+    PaginatorIterator end_;
+    size_t page_size_;
+};
+
+// класс страниц (состоит из страниц класса IteratorRange) - поле - вектор IteratorRange
+template <typename Iterator>
+class Paginator {
+public:
+    Paginator (Iterator begin, Iterator end, size_t page_size) {
+        if (page_size == 0) {
+            throw invalid_argument("Incorrect page size"s);
+        }
+
+        for (size_t i = distance(begin, end); i > 0; ) {
+            auto size = min(i, page_size);
+            auto page_end = begin + size;
+            pages_.push_back({begin, page_end, size});
+            begin = page_end;
+            i -= size;
+        }
+    }
+    auto begin() const {
+        return pages_.begin();
+    }
+    auto end() const {
+        return pages_.end();
+    }
+
+private:
+    vector<IteratorRange<Iterator>> pages_;
+}; 
+
+// для удобства - функция возвращающая класс страниц поиска
+template <typename Container>
+auto Paginate(const Container& c, size_t page_size) {
+    return Paginator (begin(c), end(c), page_size);
+}
+
+
+// ========== перегрузки для вывода страниц поиска ==========
+
+// Перегрузка для вывода документа
+ostream& operator<<(ostream& out, const Document& doc) {
+    out << "{ document_id = "s << doc.id << ", relevance = "s 
+    << doc.relevance << ", rating = "s << doc.rating << " }"s;
+    return out;
+}
+
+// Перегрузка для вывода vector<Document>
+ostream& operator<<(ostream& out, const vector<Document>& vec) {
+    for (const auto& doc : vec) {
+        out << doc << endl;
+    }
+    return out;
+}
+
+// Перегрузка для вывода IteratorRange (документов в одной странице - класса IteratorRange)
+template <typename Iterator>
+ostream& operator<<(ostream& out, const IteratorRange<Iterator>& range) {
+    for (auto it = range.Begin(); it != range.End(); ++it) {
+        out << *it;
+    }
+    return out;
+}
+
+// Перегрузка для вывода Paginator (всех страниц - вектора страниц в классе Paginator)
+template <typename Iterator>
+ostream& operator<<(ostream& out, const Paginator<Iterator>& paginator) {
+    for (const auto& page : paginator) {
+        out << page;
+    }
+    return out;
+}
 
 /* ---------- Для примера и тестирования ---------- */
 
 int main() {
 
-    SearchServer server1("и в на"s);
-
-    server1.AddDocument(1, "черный пёс рыжий хвост"s, DocumentStatus::ACTUAL, {1, 5, 7});
-    server1.AddDocument(2, "черный кот хвост"s, DocumentStatus::ACTUAL, { 1, 5, 7 });
-    server1.AddDocument(3, "белый попугай рыжий"s, DocumentStatus::ACTUAL, { 1, 5, 7 });
-
-    auto documents = server1.FindTopDocuments("черный пёс"s);
-    
-    for (const Document& document : documents) {
-        PrintDocument(document);
+    SearchServer search_server("and with"s);
+    search_server.AddDocument(1, "funny pet and nasty rat"s, DocumentStatus::ACTUAL, {7, 2, 7});
+    search_server.AddDocument(2, "funny pet with curly hair"s, DocumentStatus::ACTUAL, {1, 2, 3});
+    search_server.AddDocument(3, "big cat nasty hair"s, DocumentStatus::ACTUAL, {1, 2, 8});
+    search_server.AddDocument(4, "big dog cat Vladislav"s, DocumentStatus::ACTUAL, {1, 3, 2});
+    search_server.AddDocument(5, "big dog hamster Borya"s, DocumentStatus::ACTUAL, {1, 1, 1});
+    const auto search_results = search_server.FindTopDocuments("curly dog"s);
+    int page_size = 2;
+    const auto pages = Paginate(search_results, page_size);
+    // Выводим найденные документы по страницам
+    for (auto page = pages.begin(); page != pages.end(); ++page) {
+        cout << *page << endl;
+        cout << "Page break"s << endl;
     }
-
-    cout << server1.GetDocumentCount() << endl;
-
-    /*==========================================================*/
-
-    vector<string> stop_words_doc = { "белый"s ,  "кот"s ,  "и"s ,  "модный"s ,  "ошейник"s };
-    SearchServer search_server(stop_words_doc);
-
-    search_server.AddDocument(10, "белый кот и модный ошейник", DocumentStatus::ACTUAL, { 1 });
-    search_server.AddDocument(11, "пушистый кот пушистый хвост", DocumentStatus::ACTUAL, { 2 });
-    search_server.AddDocument(12, "ухоженный пёс выразительные глаза", DocumentStatus::ACTUAL, { 3 });
-
-    const SearchServer const_search_server = search_server;
-
-    const auto documents2 = const_search_server.FindTopDocuments("пушистый и -ухоженный кот", [](int document_id, DocumentStatus status, int rating) { return rating > 0; });
-    
-    for (const Document& document : documents2) {  // { document_id = 1, relevance = 0.732408, rating = 2 }
-        PrintDocument(document);                   // { document_id = 2, relevance = 0.274653, rating = 3 }
-    }
-
-    cout << search_server.GetDocumentId(0) << endl;
-
-    PrintMatchedDocument(search_server.MatchDocument("ухоженный"s, 12));
 
     return 0;
 }
