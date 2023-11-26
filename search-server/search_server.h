@@ -1,5 +1,6 @@
 #pragma once
 
+#include <iostream>
 #include <set>
 #include <map>
 #include <vector>
@@ -149,3 +150,5 @@ std::vector<Document> SearchServer::FindAllDocuments(const Query& query, Documen
     }
     return matched_documents;
 }
+
+void PrintMatchedDocument(const std::tuple<std::vector<std::string>, DocumentStatus>& matchResult);

@@ -161,3 +161,14 @@ SearchServer::Query SearchServer::ParseQuery(const std::string& text) const {
 double SearchServer::ComputeWordInverseDocumentFreq(const std::string& word) const {
     return log(documents_.size() * 1.0 / word_to_document_freqs_.at(word).size());
 }
+
+void PrintMatchedDocument(const std::tuple<std::vector<std::string>, DocumentStatus>& matchResult) {
+    std::vector<std::string> matchedWords = std::get<0>(matchResult);
+    DocumentStatus documentStatus = std::get<1>(matchResult);
+
+    std::cout << "Matched words: ";
+    for (const std::string& word : matchedWords) {
+        std::cout << word << " ";
+    }
+    std::cout << "\nDocument Status: " << static_cast<int>(documentStatus) << std::endl;
+}

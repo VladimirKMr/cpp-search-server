@@ -1,8 +1,3 @@
-#include <iostream>
-#include <string>
-#include <tuple>
-#include <vector>
-
 #include "document.h"
 #include "paginator.h"
 #include "read_input_functions.h"
@@ -11,24 +6,6 @@
 #include "string_processing.h"
 
 using namespace std;
-
-void PrintDocument(const Document& document) {
-    cout << "{ "s
-        << "document_id = "s << document.id << ", "s
-        << "relevance = "s << document.relevance << ", "s
-        << "rating = "s << document.rating << " }"s << endl;
-}
-
-void PrintMatchedDocument(const tuple<vector<string>, DocumentStatus>& matchResult) {
-    vector<string> matchedWords = get<0>(matchResult);
-    DocumentStatus documentStatus = get<1>(matchResult);
-
-    cout << "Matched words: ";
-    for (const string& word : matchedWords) {
-        cout << word << " ";
-    }
-    cout << "\nDocument Status: " << static_cast<int>(documentStatus) << endl;
-}
 
 int main() {
 
@@ -50,6 +27,19 @@ int main() {
     // первый запрос удален, 1437 запросов с нулевым результатом
     request_queue.AddFindRequest("sparrow"s);
     cout << "Total empty requests: "s << request_queue.GetNoResultRequests() << endl;
+
+    auto test_docs = search_server.FindTopDocuments("dog"s);
+    PrintDocument(test_docs);
+
+    auto test_match = search_server.MatchDocument("dog"s, 2);
+    PrintMatchedDocument(test_match);
+
+    size_t page_size = 2;
+    const auto pages = Paginate(test_docs, page_size);
+    for (auto page = pages.begin(); page != pages.end(); ++page) {
+        cout << *page << endl;
+        cout << "Page break"s << endl;
+    }
 
     system("pause");
     return 0;

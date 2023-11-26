@@ -1,4 +1,6 @@
 #pragma once
+#include <iostream>
+#include <vector>
 
 struct Document {
     int id = 0;
@@ -14,3 +16,13 @@ enum class DocumentStatus {
     BANNED,
     REMOVED,
 };
+
+namespace std {
+void PrintDocument(const Document& document);
+
+void PrintDocument(const vector<Document>& documents);
+
+ostream& operator<<(ostream& out, const Document& doc);
+
+ostream& operator<<(ostream& out, const vector<Document>& vec);
+}

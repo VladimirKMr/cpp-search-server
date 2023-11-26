@@ -61,25 +61,6 @@ auto Paginate(const Container& c, size_t page_size) {
     return Paginator (begin(c), end(c), page_size);
 }
 
-// ========== перегрузки для вывода страниц поиска ==========
-
-namespace std {
-
-ostream& operator<<(ostream& out, const Document& doc) {
-    out << "{ document_id = "s << doc.id << ", relevance = "s 
-    << doc.relevance << ", rating = "s << doc.rating << " }"s;
-    return out;
-}
-
-ostream& operator<<(ostream& out, const vector<Document>& vec) {
-    for (const auto& doc : vec) {
-        out << doc << endl;
-    }
-    return out;
-}
-
-}
-
 // Перегрузка для вывода IteratorRange (документов в одной странице - класса IteratorRange)
 template <typename Iterator>
 std::ostream& std::operator<<(std::ostream& out, const IteratorRange<Iterator>& range) {
